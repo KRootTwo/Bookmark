@@ -6,8 +6,8 @@
 #include <ctype.h>
 #include <time.h>
 
-#define csv_file "/home/ktv/CodeShit/D/bookmark/Data/db.csv"
-#define temp_file "/home/ktv/CodeShit/D/bookmark/Data/temp.csv"
+#define csv_file "/home/ktv/C Projects/Bookmark/Data/db.csv"
+#define temp_file "/home/ktv/C Projects/Bookmark/Data/temp.csv"
 
 // enums
 typedef enum {
