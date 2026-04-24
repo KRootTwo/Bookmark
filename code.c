@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <ctype.h>
 #include <time.h>
+#include <unistd.h>
 
 #define csv_file "/home/ktv/C Projects/Bookmark/Data/db.csv"
 #define temp_file "/home/ktv/C Projects/Bookmark/Data/temp.csv"
@@ -107,7 +108,7 @@ typedef struct{
     Rating rating;
 } Book;
 
-//--------------------------helper functions-----------------------------
+//-----------------------helper functions---------------------------
 // String fn
 void to_lower_inplace(char *str) {
     for (int i = 0; str[i] != '\0'; i++) {
@@ -119,6 +120,16 @@ char* to_lower(char *str) {
         *p = tolower((unsigned char)*p);
     }
     return str;
+}
+char* to_upper(const char *str) {
+    char* base = malloc(sizeof(str) + 1);
+    if (base == NULL) return NULL;
+    strcpy(base, str);
+
+    for (char *p = base; *p; p++) {
+        *p = toupper((unsigned char)*p);
+    }
+    return base;
 }
 // time fn
 long get_today_long_date () {
@@ -175,6 +186,19 @@ void compare_time(long t1, long t2) {
     else {
         printf("%d days %d hours %d minutes\n", days, hours, minutes);
     }
+}
+void clear_screen() {
+    printf("\033[2J\033[H");
+    fflush(stdout);
+}
+void pause_screen() {
+    printf("↵ to continue: \033[?25l");
+    while (getchar() != '\n');
+    getchar();
+    printf("\033[?25h");
+}
+void header() {
+    printf("\n== BOOK TRACKER ==\n");
 }
 
 //----------------------special functions---------------------------
@@ -257,7 +281,8 @@ void show_all_name (Book *book, size_t s) {
     printf("\n");
     for (size_t i = 0; i < s; i++) {
         if (!book[i].isDeleted) {
-            printf("Bookname - %s\nAuthor - %s\n",
+            printf("\033[35m%d. \033[38;5;84m%s\n\033[38;5;197m%s\033[0m\n",
+                book[i].sl_no,
                 book[i].book_name,
                 book[i].author
             );
@@ -312,37 +337,64 @@ void update_progress (Book *book, size_t s, int sl, int pageno) {
         }
     }
 }
+void show_progress_bar(Book *book, int sl) {
+    float tot_page = book[sl].total_pages;
+    float curr_page = book[sl].current_page;
+
+    if ((int)curr_page <= 0) {
+        printf("[\033[38;5;18m--------------------\033[0m] 0%% (\033[31mNot Started\033[0m)\n");
+    }
+    else if ((int)curr_page >= (int)tot_page) {
+        printf("[\033[38;5;202m####################\033[0m] 100%% (\033[38;5;81mFinished\033[0m)\n");
+    }
+    else {
+        float div = (curr_page/tot_page);
+        int two_par = (div * 20 + 0.5);
+        int par = div * 100;
+
+        printf("[\033[38;5;202m");
+        for (int i = 0; i < two_par; i++) {
+            printf("#");
+        }
+        printf("\033[38;5;18m");
+        for (int j = 0; j < (20 - two_par); j++) {
+            printf("-");
+        }
+        printf("\033[0m] %d%% (\033[38;5;40mReading\033[0m)\n", par);
+    }
+}
 void show_all (Book *book, size_t s) {
     printf("\n");
     for (size_t i = 0; i < s; i++) {
         if (!book[i].isDeleted) {
-            printf("Sl No. - %d\nBookname - %s\nAuthor - %s\nCategory - %s\nBookId - %s\nTotal Pages - %d\nStart Date - ",
+            printf("\033[35m%d. \033[38;5;84m%s\n\033[38;5;197m%s\n\033[33m%s\n\033[36m%s\033[0m\n\nProgress - \033[38;5;198m%d\033[0m/\033[38;5;148m%d\033[0m\n",
                 book[i].sl_no,
                 book[i].book_name,
                 book[i].author,
                 category_to_string(book[i].category),
                 book[i].book_id,
+                book[i].current_page,
                 book[i].total_pages
             );
+            show_progress_bar(book, i);
+            printf("\nStart  - ");
             show_date_string(book[i].start_date);
             if (book[i].isFinished) {
-                printf("Finish Date - ");
+                printf("Finish - ");
                 show_date_string(book[i].finish_date);
-                printf("Spend on book: ");
+                printf("Spent on book: ");
                 compare_time(get_today_long_date(), book[i].start_date);
-                printf("Rating - %s\n",
-                rating_to_string(book[i].rating));
+                printf("Rating - \033[94m%s\033[0m\n",
+                to_upper(rating_to_string(book[i].rating)));
             }
             else {
-                printf("Current Page - %d\n", book[i].current_page);
-                printf("Spend on book: ");
+                printf("Spent on book: ");
                 compare_time(get_today_long_date(), book[i].start_date);
             }
         }
         printf("\n");
     }
 }
-
 void show_book (Book *book, size_t s, int sl) {
     printf("\n");
     for (size_t i = 0; i < s; i++) {
@@ -477,7 +529,7 @@ void add_book(Book **book, size_t *s, int *lastsl) {
         (*book)[t].isFinished = false;
         (*book)[t].finish_date = 0;
     }
-
+    printf("\nBook added successfully.\n");
 }
 void delete_book(Book *book, size_t s, int sl) {
     for (size_t i = 0; i < s; i++) {
@@ -486,6 +538,7 @@ void delete_book(Book *book, size_t s, int sl) {
         }
     }
 }
+
 // main shite
 int main() {
     char buffer[256];
@@ -515,28 +568,39 @@ int main() {
     int choice;
 
     while (true) {
-        printf("\n1. Show all books\n");
+        clear_screen();
+        header();
+        printf("1. Show all books\n");
         printf("2. Get book sl\n");
         printf("3. Show book\n");
         printf("4. Add book\n");
         printf("5. Update progress\n");
         printf("6. Delete book\n");
         printf("7. Save & Exit\n");
-        printf("Enter choice: ");
+        printf("\nEnter choice: ");
         scanf("%d", &choice);
 
-        if (choice == 1) show_all(book, s);
+        if (choice == 1) {
+            clear_screen();
+            show_all(book, s);
+            pause_screen();
+        }
         else if (choice == 2) {
             int sl = select_book(book, s);
             printf("Here's the sl: %d\n", sl);
+            pause_screen();
         }
         else if (choice == 3) {
             int sl;
             printf("Enter sl no: ");
             scanf("%d", &sl);
             show_book(book, s, sl);
+            pause_screen();
         }
-        else if (choice == 4) add_book(&book, &s, &lastsl);
+        else if (choice == 4) {
+            add_book(&book, &s, &lastsl);
+            pause_screen();
+        }
         else if (choice == 5) {
             int sl, page;
             printf("Enter sl no: ");
@@ -544,12 +608,14 @@ int main() {
             printf("Enter page: ");
             scanf("%d", &page);
             update_progress(book, s, sl, page);
+            pause_screen();
         }
         else if (choice == 6) {
             int sl;
             printf("Enter sl no: ");
             scanf("%d", &sl);
             delete_book(book, s, sl);
+            pause_screen();
         }
         else if (choice == 7) {
             save_to_csv(book, s);
