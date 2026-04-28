@@ -9,6 +9,7 @@
 
 #define csv_file "/home/ktv/C Projects/Bookmark/Data/db.csv"
 #define temp_file "/home/ktv/C Projects/Bookmark/Data/temp.csv"
+#define bar_len 30
 
 // enums
 typedef enum {
@@ -192,7 +193,7 @@ void clear_screen() {
     fflush(stdout);
 }
 void pause_screen() {
-    printf("↵ to continue: \033[?25l");
+    printf("↵ to continue \033[?25l");
     while (getchar() != '\n');
     getchar();
     printf("\033[?25h");
@@ -254,6 +255,7 @@ void load_from_csv (Book *book, size_t s, FILE *fp1, int *lastsl) {
             *lastsl = book[j].sl_no;
 }
 }
+
 void save_to_csv (Book *book, size_t s) {
     FILE *fp2 = fopen(temp_file, "w");
     for (size_t i = 0; i < s; i++) {
@@ -277,6 +279,122 @@ void save_to_csv (Book *book, size_t s) {
     remove(csv_file);
     rename(temp_file, csv_file);
 }
+
+void update_progress (Book *book, size_t s, int sl, int pageno) {
+    for (size_t i = 0; i < s; i++) {
+        if (book[i].sl_no == sl && !book[i].isDeleted) {
+            if (!book[i].isFinished) {
+                book[i].current_page = pageno;
+            }
+            else {
+                printf("Starting Over? ");
+                char ch;
+                scanf(" %c", &ch);
+                if (tolower(ch) == 'y') {
+                    book[i].current_page = pageno;
+                }
+            }
+        }
+    }
+}
+
+void update_progress_bar(int line_no, int percent) {
+    printf("\033[%d;1H", line_no);
+    printf("\033[K");
+
+    if (percent < 0) percent = 0;
+    if (percent > 100) percent = 100;
+
+    int ch_cnt = (percent * bar_len) / 100;
+
+    printf("[\033[38;5;202m");
+    for (int i = 0; i < ch_cnt; i++) printf("#");
+
+    printf("\033[38;5;18m");
+    for (int i = 0; i < bar_len - ch_cnt; i++) printf("-");
+
+    printf("\033[0m] %d%%", percent);
+
+    if (percent <= 0) printf(" (\033[31mNot Started\033[0m)");
+    else if (percent >= 100) printf(" (\033[38;5;81mFinished\033[0m)");
+    else printf(" (\033[38;5;40mReading\033[0m)");
+
+    fflush(stdout);
+}
+
+void show_progress_bar(Book *book, size_t s, int *line_nos) {
+    int prog[s];
+
+    for (size_t i = 0; i < s; i++) {
+        if (book[i].isDeleted || book[i].total_pages == 0) {
+            prog[i] = 0;
+        } else {
+            prog[i] = (book[i].current_page * 100) / book[i].total_pages;
+        }
+    }
+
+    for (int step = 0; step <= 100; step++) {
+        for (size_t i = 0; i < s; i++) {
+            if (!book[i].isDeleted) {
+                int current = (prog[i] * step) / 100;
+                update_progress_bar(line_nos[i], current);
+            }
+        }
+        usleep(10000);
+    }
+    printf("\033[7B\n");
+}
+
+void show_all (Book *book, size_t s) {
+    printf("\n");
+
+    int line_no = 1;
+    int* book_pg_line = malloc(sizeof(int) * s);
+
+    for (size_t i = 0; i < s; i++) {
+        if (!book[i].isDeleted) {
+
+            printf("\033[35m%d. \033[38;5;84m%s\n\033[38;5;197m%s\n\033[33m%s\n\033[36m%s\033[0m\n\nProgress - \033[38;5;198m%d\033[0m/\033[38;5;148m%d\033[0m\n",
+                book[i].sl_no,
+                book[i].book_name,
+                book[i].author,
+                category_to_string(book[i].category),
+                book[i].book_id,
+                book[i].current_page,
+                book[i].total_pages
+            );
+
+            line_no += 7;
+            book_pg_line[i] = line_no;
+
+            printf("\n\nStart  - ");
+            show_date_string(book[i].start_date);
+            line_no += 2;
+
+            if (book[i].isFinished) {
+                printf("Finish - ");
+                show_date_string(book[i].finish_date);
+                printf("Spent on book: ");
+                compare_time(get_today_long_date(), book[i].start_date);
+                printf("Rating - \033[94m%s\033[0m\n",
+                       to_upper(rating_to_string(book[i].rating)));
+                line_no += 3;
+            } else {
+                printf("Spent on book: ");
+                compare_time(get_today_long_date(), book[i].start_date);
+                line_no += 1;
+            }
+        }
+
+        printf("\n");
+        line_no += 1;
+    }
+
+    show_progress_bar(book, s, book_pg_line);
+
+    free(book_pg_line);
+}
+
 void show_all_name (Book *book, size_t s) {
     printf("\n");
     for (size_t i = 0; i < s; i++) {
@@ -290,6 +408,7 @@ void show_all_name (Book *book, size_t s) {
         printf("\n");
     }
 }
+
 int select_book (Book *book, size_t s) {
     char buffer[100];
     show_all_name(book, s);
@@ -320,81 +439,7 @@ int select_book (Book *book, size_t s) {
     }
     return -1;
 }
-void update_progress (Book *book, size_t s, int sl, int pageno) {
-    for (size_t i = 0; i < s; i++) {
-        if (book[i].sl_no == sl && !book[i].isDeleted) {
-            if (!book[i].isFinished) {
-                book[i].current_page = pageno;
-            }
-            else {
-                printf("Starting Over? ");
-                char ch;
-                scanf(" %c", &ch);
-                if (tolower(ch) == 'y') {
-                    book[i].current_page = pageno;
-                }
-            }
-        }
-    }
-}
-void show_progress_bar(Book *book, int sl) {
-    float tot_page = book[sl].total_pages;
-    float curr_page = book[sl].current_page;
 
-    if ((int)curr_page <= 0) {
-        printf("[\033[38;5;18m--------------------\033[0m] 0%% (\033[31mNot Started\033[0m)\n");
-    }
-    else if ((int)curr_page >= (int)tot_page) {
-        printf("[\033[38;5;202m####################\033[0m] 100%% (\033[38;5;81mFinished\033[0m)\n");
-    }
-    else {
-        float div = (curr_page/tot_page);
-        int two_par = (div * 20 + 0.5);
-        int par = div * 100;
-
-        printf("[\033[38;5;202m");
-        for (int i = 0; i < two_par; i++) {
-            printf("#");
-        }
-        printf("\033[38;5;18m");
-        for (int j = 0; j < (20 - two_par); j++) {
-            printf("-");
-        }
-        printf("\033[0m] %d%% (\033[38;5;40mReading\033[0m)\n", par);
-    }
-}
-void show_all (Book *book, size_t s) {
-    printf("\n");
-    for (size_t i = 0; i < s; i++) {
-        if (!book[i].isDeleted) {
-            printf("\033[35m%d. \033[38;5;84m%s\n\033[38;5;197m%s\n\033[33m%s\n\033[36m%s\033[0m\n\nProgress - \033[38;5;198m%d\033[0m/\033[38;5;148m%d\033[0m\n",
-                book[i].sl_no,
-                book[i].book_name,
-                book[i].author,
-                category_to_string(book[i].category),
-                book[i].book_id,
-                book[i].current_page,
-                book[i].total_pages
-            );
-            show_progress_bar(book, i);
-            printf("\nStart  - ");
-            show_date_string(book[i].start_date);
-            if (book[i].isFinished) {
-                printf("Finish - ");
-                show_date_string(book[i].finish_date);
-                printf("Spent on book: ");
-                compare_time(get_today_long_date(), book[i].start_date);
-                printf("Rating - \033[94m%s\033[0m\n",
-                to_upper(rating_to_string(book[i].rating)));
-            }
-            else {
-                printf("Spent on book: ");
-                compare_time(get_today_long_date(), book[i].start_date);
-            }
-        }
-        printf("\n");
-    }
-}
 void show_book (Book *book, size_t s, int sl) {
     printf("\n");
     for (size_t i = 0; i < s; i++) {
@@ -423,6 +468,7 @@ void show_book (Book *book, size_t s, int sl) {
     }
     printf("\n");
 }
+
 bool check_bookid (Book *book, size_t s, char *id) {
     char *temp = to_lower(id);
     for (size_t i = 0; i < s; i++) {
@@ -432,6 +478,7 @@ bool check_bookid (Book *book, size_t s, char *id) {
     }
     return false;
 }
+
 void add_book(Book **book, size_t *s, int *lastsl) {
     char ch;
     printf("Do you wanna add a book? ");
@@ -531,6 +578,7 @@ void add_book(Book **book, size_t *s, int *lastsl) {
     }
     printf("\nBook added successfully.\n");
 }
+
 void delete_book(Book *book, size_t s, int sl) {
     for (size_t i = 0; i < s; i++) {
         if (book[i].sl_no == sl) {
@@ -538,6 +586,7 @@ void delete_book(Book *book, size_t s, int sl) {
         }
     }
 }
+
 
 // main shite
 int main() {
